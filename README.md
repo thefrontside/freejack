@@ -23,6 +23,7 @@
 
 ### Principles
 
-1. Data is pushed, never pulled.
+1. Data is pushed, never pulled unless it is to either re-push elswhere or to
+   consume for rendering.
 2. view = f(event) e.g. view is the terminus of a data stream.
 3. clear route hierachy for mapping urls to application state
