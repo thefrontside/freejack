@@ -3,9 +3,8 @@ import type { MetroStation } from "./types.ts";
 import { body, head, html, p, title, div, li, a } from "../lib/html.ts";
 import { outlet, subtitle } from "../lib/outlet.ts";
 
-export const app = [function* main() {
-  return html(
-    { lang: "en-US" },
+export default [function* main() {
+  return html({ lang: "en-US" },
     head(
       title("Transport for London: ", yield* subtitle.outlet),
       body({ class: "body" }, yield* outlet),
@@ -23,7 +22,7 @@ export const app = [function* main() {
   },
 
   *["/stations/:id"](station: MetroStation) {
-    yield* subtitle(`${station} Station`);
+    yield* subtitle(station.name);
     return p("selected station", station.id);
   },
 }] as const;
