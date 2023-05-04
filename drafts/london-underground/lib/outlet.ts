@@ -1,11 +1,11 @@
-import { createContext, getframe, type Operation } from "./effection.ts";
+import { type Operation } from "./effection.ts";
+import { createContext } from "./context.ts";
 import type { Node } from "./html.ts";
 
 export const outlet = createContext<Node>("outlet", "");
 
-export function* subtitle(value: string): Operation<void> {
-  let frame = yield* getframe();
-  frame.context["subtitles"] = value;
-}
+export const subtitle = createContext<string>("subtitles");
 
-subtitle.outlet = createContext<string>('subtitles');
+export function* useSubtitle(value: string): Operation<void> {
+  yield* subtitle.set(value);
+}

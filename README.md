@@ -1,11 +1,8 @@
 ## Freejack
 
-> 1. A dissident or loner; somebody who roams the world without being
-> tied to a distict group, ideology or belief system.
->
-> 2. A framework that derives interfaces from freely combined streams
-> of data.
-
+> 1. A dissident or loner; somebody who roams the world without being tied to a
+   > distict group, ideology or belief system.
+> 2. A framework that derives interfaces from freely combined streams of data.
 
 ### Goals
 
@@ -19,7 +16,6 @@
    2. run in a browser and stream data to devtools pane.
    3. Act as standalone app and stream data from node/deno process
    4. be self-inspectable. I.e. Inspector can inspect Inspector
-
 
 ### Principles
 

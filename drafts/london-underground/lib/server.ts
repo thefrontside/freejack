@@ -1,8 +1,10 @@
-import { getframe, expect, useScope, type Operation } from "./effection.ts";
-import { useOak, type OakServer } from "./oak.ts";
+import { bundle } from "https://deno.land/x/emit@0.21.1/mod.ts";
+import { expect, getframe, type Operation, useScope } from "./effection.ts";
+import { type OakServer, useOak, Router } from "./oak.ts";
 import type { ServerHandler } from "./types.ts";
-import type { Tag, Node } from "./html.ts";
-import { Document, Element } from "./dom.ts"
+import type { Node, Tag } from "./html.ts";
+import { Document, Element } from "./dom.ts";
+import { ScriptsContext } from "./script.ts";
 import { createRouteRecognizer, type Pattern } from "./route-recognizer.ts";
 import { default as inc } from "npm:incremental-dom";
 
@@ -13,59 +15,107 @@ export interface FreejackServerOptions {
   port: number;
 }
 
-export function useServer(options: FreejackServerOptions): Operation<OakServer> {
+export function useServer(
+  options: FreejackServerOptions,
+): Operation<OakServer> {
   return useOak({
     port: options.port,
     *init(http) {
-
-      let servermod = yield* expect(import(`${options.appdir}/${options.servermod}`));
+      let servermod = yield* expect(
+        import(`${options.appdir}/${options.servermod}`),
+      );
       let appmod = yield* expect(import(`${options.appdir}/app.ts`));
 
       let recognizer = createRecognizer(appmod.default, servermod.default);
 
       let scope = yield* useScope();
 
-      http.use((ctx) => scope.run(function* (): Operation<void> {
+      let router = new Router();
 
-        let segments = recognizer.recognize(ctx.request.url.pathname);
+      router.get("/scripts/:path", async (ctx) => {
+        let { path } = ctx.params;
+        let url = new URL(`file://${options.appdir}/scripts/${path}`);
+        let result = await bundle(url);
+        ctx.response.headers.set("Content-Type", "text/javascript");
+        ctx.response.body = result.code;
+      });
 
-        if (!segments) {
-          ctx.response.body = "Not Found";
-        } else {
-          let frame = yield* getframe();
-          let top: Tag<string> = ["html", {}, []];
+      http.use(router.routes());
 
-          for (let i = segments.length - 1; i >=0; i--) {
-            let result = segments[i];
-            let handler = result.handler as ServerHandler<unknown>;
-            let model = yield* handler.model(result.params);
-            let view = yield* handler.view(model);
-            top = frame.context.outlet = view;
+      http.use((ctx) =>
+        scope.run(function* (): Operation<void> {
+          let scripts = yield* ScriptsContext.set([]);
+          let segments = recognizer.recognize(ctx.request.url.pathname);
+
+          if (!segments) {
+            ctx.response.body = "Not Found";
+          } else {
+            let frame = yield* getframe();
+            let top: Tag<string> = ["html", {}, []];
+
+            for (let i = segments.length - 1; i >= 0; i--) {
+              let result = segments[i];
+              let handler = result.handler as ServerHandler<unknown>;
+              let model = yield* handler.model(result.params);
+              let view = yield* handler.view(model);
+              top = frame.context.outlet = view;
+            }
+
+            let doc = new Document().implementation.createHTMLDocument();
+            if (!doc.documentElement) {
+              throw new Error("null document element");
+            }
+
+            let element = doc.documentElement;
+            render(top, element);
+
+            if (scripts.length > 0) {
+
+              let src = [
+                ``,
+                `import { run, expect, spawn, suspend } from "/scripts/effection.ts";`,
+                `const scripts = ${JSON.stringify(scripts)};`,
+                `let task = run(function*() {`,
+                `  for (let script of scripts) {`,
+                `    yield* spawn(function*() {`,
+                `      let mod = yield* expect(import(\`/scripts/\${script}\`).then(i => { console.dir({ i }); return i; }))`,
+                `      yield* mod.default()`,
+                `    });`,
+                `  }`,
+                `  yield* suspend();`,
+                `});`,
+                `window.addEventListener('beforeunload', () => task.halt())`,
+                ``,
+              ].join("\n");
+
+              let el = doc.createElement("script");
+              el.setAttribute("type", "module");
+              el.setAttribute("async", true);
+
+              el.innerText = src;
+
+              element.appendChild(el);
+            }
+
+            ctx.response.body = element.outerHTML;
           }
-
-          let doc = new Document().implementation.createHTMLDocument();
-          if (!doc.documentElement) {
-            throw new Error('null document element');
-          }
-
-          let element = doc.documentElement;
-          render(top, element)
-
-          ctx.response.body = element.outerHTML;
-        }
-      }));
+        })
+              );
     },
   });
 }
 
-export function createRecognizer(app: any, server: any): ReturnType<typeof createRouteRecognizer> {
+export function createRecognizer(
+  app: any,
+  server: any,
+): ReturnType<typeof createRouteRecognizer> {
   let recognizer = createRouteRecognizer();
   let collection = collect({
     app,
     server,
     path: "",
     pathway: [],
-    patterns: []
+    patterns: [],
   });
 
   for (let patterns of collection) {
@@ -76,8 +126,8 @@ export function createRecognizer(app: any, server: any): ReturnType<typeof creat
 }
 
 interface PatternCollector {
-  app: any,
-  server: any,
+  app: any;
+  server: any;
   path: string;
   patterns: Pattern[][];
   pathway: Pattern[];
@@ -85,7 +135,7 @@ interface PatternCollector {
 
 export function collect(collector: PatternCollector): Pattern[][] {
   let { app, server, path, pathway } = collector;
-  if (typeof app === 'function') {
+  if (typeof app === "function") {
     return [
       ...collector.patterns,
       [...pathway, { path, handler: { model: server, view: app } }],
@@ -111,7 +161,7 @@ export function collect(collector: PatternCollector): Pattern[][] {
         path: key,
         patterns: [],
         pathway,
-      }))
+      }));
     }
     return patterns;
   }
